@@ -60,6 +60,40 @@ void dumpv_expr(tree expr);
 void dumpv_constant(tree constant);
 void dumpv_decl_ref(tree decl);
 
+typedef struct {
+  const struct line_map *map;
+  source_location where;
+} loc_map_pair;
+void show_macro(source_location where) {
+  const struct line_map* map = linemap_lookup(line_table, where);
+  if (!linemap_macro_expansion_map_p(map))
+    return;
+  loc_map_pair loc;
+  vec<loc_map_pair> loc_vec = vNULL;
+  do {
+    loc.where = where;
+    loc.map = map;
+    loc_vec.safe_push(loc);
+    where = linemap_unwind_toward_expansion(line_table, where, &map);
+  } while (linemap_macro_expansion_map_p(map));
+
+  unsigned ix;
+  loc_map_pair* iter;
+  FOR_EACH_VEC_ELT(loc_vec, ix, iter) {
+    source_location resolved_def_loc = linemap_resolve_location (line_table, iter->where, LRK_MACRO_DEFINITION_LOCATION, NULL);
+    if (ix == 0) {
+      source_location resolved_def_loc = linemap_resolve_location (line_table, iter->where, LRK_MACRO_DEFINITION_LOCATION, NULL);
+      PRINT_LOC(resolved_def_loc);
+      printf("DEF %s\n", linemap_map_get_macro_name (iter->map));
+      continue;
+    }
+    source_location resolved_exp_loc = linemap_resolve_location (line_table, MACRO_MAP_EXPANSION_POINT_LOCATION (iter->map), LRK_MACRO_DEFINITION_LOCATION, NULL);
+    PRINT_LOC(resolved_exp_loc);
+    printf("EXP %s\n", linemap_map_get_macro_name (iter->map));
+  }
+  loc_vec.release ();
+}
+
 std::string _get_type_name(tree type) {
   tree typedecl = TYPE_NAME(type);
   if (typedecl != NULL_TREE)
@@ -199,6 +233,12 @@ void dumpv_expr(tree expr) {
       dumpv_block_item(CALL_EXPR_ARG(expr, i));
     indent.del();
     return;
+  }
+  if (TREE_CODE(expr) == PLUS_EXPR) {
+    location_t loc = EXPR_LOCATION(expr);
+    PRINT_LOC(loc);
+    show_macro(loc);
+    PRINT_LOC(loc);
   }
   indent.add();
   int len = TREE_OPERAND_LENGTH(expr);
