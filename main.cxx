@@ -85,7 +85,13 @@ void dump_unknown(tree node) {
 void dump_function_decl(tree fndecl) {
   printf("%s%d %s ", indent.c_str(), TREE_CODE(fndecl), tree_code_name[TREE_CODE(fndecl)]);
   const char* label = (DECL_NAME(fndecl) ? IDENTIFIER_POINTER(DECL_NAME(fndecl)) : "(unnamed)");
-  printf("%s\n", label);
+  /*
+  struct function* fn = DECL_STRUCT_FUNCTION(fndecl);
+  location_t start = fn->function_start_locus, end = fn->function_end_locus;
+  printf("%s %s:%d:%d %s:%d:%d\n", label, LOCATION_FILE(start), LOCATION_LINE(start), LOCATION_COLUMN(start), LOCATION_FILE(end), LOCATION_LINE(end), LOCATION_COLUMN(end));
+  */
+  location_t loc = DECL_SOURCE_LOCATION(fndecl);
+  printf("%s %s:%d:%d\n", label, LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
   indent.add();
   dump_result_decl(DECL_RESULT(fndecl));
   for (tree args = DECL_ARGUMENTS(fndecl); args; args = DECL_CHAIN(args))
@@ -96,7 +102,8 @@ void dump_function_decl(tree fndecl) {
 void dump_result_decl(tree resdecl) {
   printf("%s%d %s ", indent.c_str(), TREE_CODE(resdecl), tree_code_name[TREE_CODE(resdecl)]);
   const char* label = (DECL_NAME(resdecl) ? IDENTIFIER_POINTER(DECL_NAME(resdecl)) : "(unnamed)");
-  printf("%s\n", label);
+  location_t loc = DECL_SOURCE_LOCATION(resdecl);
+  printf("%s %s:%d:%d\n", label, LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
   indent.add();
   dumpv_type(TREE_TYPE(resdecl));
   indent.del();
@@ -104,7 +111,8 @@ void dump_result_decl(tree resdecl) {
 void dump_parm_decl(tree args) {
   printf("%s%d %s ", indent.c_str(), TREE_CODE(args), tree_code_name[TREE_CODE(args)]);
   const char* label = (DECL_NAME(args) ? IDENTIFIER_POINTER(DECL_NAME(args)) : "(unnamed)");
-  printf("%s\n", label);
+  location_t loc = DECL_SOURCE_LOCATION(args);
+  printf("%s %s:%d:%d\n", label, LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
   indent.add();
   dumpv_type(TREE_TYPE(args));
   indent.del();
@@ -116,7 +124,8 @@ void dumpv_type(tree type) {
 void dump_function_decl_incomplete(tree fndecl) {
   printf("%s%d %s ", indent.c_str(), TREE_CODE(fndecl), tree_code_name[TREE_CODE(fndecl)]);
   const char* label = (DECL_NAME(fndecl) ? IDENTIFIER_POINTER(DECL_NAME(fndecl)) : "(unnamed)");
-  printf("%s\n", label);
+  location_t loc = DECL_SOURCE_LOCATION(fndecl);
+  printf("%s %s:%d:%d\n", label, LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
   indent.add();
   dump_function_type(TREE_TYPE(fndecl));
   indent.del();
@@ -131,14 +140,16 @@ void dump_function_type(tree fntype) {
 void dump_var_decl(tree vardecl) {
   printf("%s%d %s ", indent.c_str(), TREE_CODE(vardecl), tree_code_name[TREE_CODE(vardecl)]);
   const char* label = (DECL_NAME(vardecl) ? IDENTIFIER_POINTER(DECL_NAME(vardecl)) : "(unnamed)");
-  printf("%s\n", label);
+  location_t loc = DECL_SOURCE_LOCATION(vardecl);
+  printf("%s %s:%d:%d\n", label, LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
   indent.add();
   dumpv_type(TREE_TYPE(vardecl));
   indent.del();
 }
 void dump_bind_expr(tree block) {
   printf("%s%d %s ", indent.c_str(), TREE_CODE(block), tree_code_name[TREE_CODE(block)]);
-  printf("()\n");
+  location_t loc = EXPR_LOCATION(block);
+  printf("() %s:%d:%d\n", LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
   indent.add();
   for (tree vardecl = BIND_EXPR_VARS(block); vardecl; vardecl = TREE_CHAIN(vardecl))
     dump_var_decl(vardecl);
@@ -188,9 +199,9 @@ void dumpv_block_item(tree item) {
   }
 }
 void dumpv_expr(tree expr) {
-  location_t loc = EXPR_CHECK((expr))->exp.locus;
   printf("%s%d %s ", indent.c_str(), TREE_CODE(expr), tree_code_name[TREE_CODE(expr)]);
-  printf("()\n");
+  location_t loc = EXPR_LOCATION(expr);
+  printf("() %s:%d:%d\n", LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
   if (TREE_CODE(expr) == CALL_EXPR) {
     indent.add();
     dumpv_block_item(CALL_EXPR_FN(expr));
@@ -218,7 +229,8 @@ void dumpv_constant(tree constant) {
 void dumpv_decl_ref(tree decl) {
   printf("%s%d %s ", indent.c_str(), TREE_CODE(decl), tree_code_name[TREE_CODE(decl)]);
   const char* label = (DECL_NAME(decl) ? IDENTIFIER_POINTER(DECL_NAME(decl)) : "(unnamed)");
-  printf("%s\n", label);
+  location_t loc = DECL_SOURCE_LOCATION(decl);
+  printf("%s %s:%d:%d\n", label, LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
 }
 
 void callback_pre_genericize (void *gcc_data, void *user_data)
