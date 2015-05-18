@@ -6,6 +6,7 @@
 #include "function.h"
 #include <cstdio>
 #include <string>
+#include <sstream>
 #include <cassert>
 
 #define INSPECT_TREE_CODE(tree) printf("TREE_CODE(" #tree ") = %s\n", tree_code_name[TREE_CODE(tree)])
@@ -59,6 +60,40 @@ void dumpv_block_item(tree item);
 void dumpv_expr(tree expr);
 void dumpv_constant(tree constant);
 void dumpv_decl_ref(tree decl);
+
+typedef struct {
+  const struct line_map *map;
+  source_location where;
+} loc_map_pair;
+std::string get_macro_info(source_location where) {
+  const struct line_map* map = linemap_lookup(line_table, where);
+  if (!linemap_macro_expansion_map_p(map))
+    return std::string("");
+
+  loc_map_pair loc;
+  vec<loc_map_pair> loc_vec = vNULL;
+  do {
+    loc.where = where;
+    loc.map = map;
+    loc_vec.safe_push(loc);
+    where = linemap_unwind_toward_expansion(line_table, where, &map);
+  } while (linemap_macro_expansion_map_p(map));
+
+  std::ostringstream res;
+  unsigned ix;
+  loc_map_pair* iter;
+  FOR_EACH_VEC_ELT(loc_vec, ix, iter) {
+    if (ix == 0) {
+      source_location resolved_def_loc = linemap_resolve_location (line_table, iter->where, LRK_MACRO_DEFINITION_LOCATION, NULL);
+      res << LOCATION_FILE(resolved_def_loc) << ":" << LOCATION_LINE(resolved_def_loc) << ":" << LOCATION_COLUMN(resolved_def_loc);
+    }
+    res << " " << linemap_map_get_macro_name(iter->map) << " ";
+    source_location resolved_exp_loc = linemap_resolve_location (line_table, MACRO_MAP_EXPANSION_POINT_LOCATION (iter->map), LRK_MACRO_DEFINITION_LOCATION, NULL);
+    res << LOCATION_FILE(resolved_exp_loc) << ":" << LOCATION_LINE(resolved_exp_loc) << ":" << LOCATION_COLUMN(resolved_exp_loc);
+  }
+  loc_vec.release ();
+  return res.str();
+}
 
 std::string _get_type_name(tree type) {
   tree typedecl = TYPE_NAME(type);
@@ -201,7 +236,7 @@ void dumpv_block_item(tree item) {
 void dumpv_expr(tree expr) {
   printf("%s%d %s ", indent.c_str(), TREE_CODE(expr), tree_code_name[TREE_CODE(expr)]);
   location_t loc = EXPR_LOCATION(expr);
-  printf("() %s:%d:%d\n", LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
+  printf("() %s:%d:%d (%s)\n", LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc), get_macro_info(loc).c_str());
   if (TREE_CODE(expr) == CALL_EXPR) {
     indent.add();
     dumpv_block_item(CALL_EXPR_FN(expr));
