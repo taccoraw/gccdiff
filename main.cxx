@@ -59,21 +59,203 @@ public:
     return _indent.c_str();
   }
 } indent;
-void dumpv_unknown(tree node);
 void dump_function_decl(tree fndecl);
-void dump_result_decl(tree resdecl);
-void dump_parm_decl(tree args);
+void dump_identifier_node(tree id);
 void dumpv_type(tree type);
-void dump_function_decl_incomplete(tree fndecl);
-void dump_function_type(tree fntype);
-void dump_var_decl(tree vardecl);
-void dump_bind_expr(tree block);
-void dumpv_body(tree body);
-void dump_statement_list(tree stmts);
-void dumpv_block_item(tree item);
+void dumpv_decl(tree decl);
+void dumpv_cst(tree cst);
 void dumpv_expr(tree expr);
-void dumpv_constant(tree constant);
-void dumpv_decl_ref(tree decl);
+void dumpv_node(tree node);
+void dumpv_unknown(tree node, int line);
+
+void dump_function_decl(tree fndecl) {
+  fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(fndecl), tree_code_name[TREE_CODE(fndecl)]);
+  location_t loc = DECL_SOURCE_LOCATION(fndecl);
+  struct function* fn = DECL_STRUCT_FUNCTION(fndecl);
+  location_t start = fn->function_start_locus, end = fn->function_end_locus;
+  fprintf(os, "%s:%d:%d %s:%d:%d\n", LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc), LOCATION_FILE(end), LOCATION_LINE(end), LOCATION_COLUMN(end));
+  indent.add();
+  dump_identifier_node(DECL_NAME(fndecl));
+  dumpv_decl(DECL_RESULT(fndecl));
+  for (tree args = DECL_ARGUMENTS(fndecl); args; args = DECL_CHAIN(args))
+    dumpv_decl(args);
+  dumpv_expr(DECL_SAVED_TREE(fndecl));
+  indent.del();
+}
+void dump_identifier_node(tree id) {
+  if (id == NULL_TREE)
+    return;
+  fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(id), tree_code_name[TREE_CODE(id)]);
+  fprintf(os, "%s\n", IDENTIFIER_POINTER(id));
+}
+void dumpv_decl(tree decl) {
+  fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(decl), tree_code_name[TREE_CODE(decl)]);
+  location_t loc = DECL_SOURCE_LOCATION(decl);
+  fprintf(os, "%s:%d:%d\n", LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
+  indent.add();
+  dump_identifier_node(DECL_NAME(decl));
+  dumpv_type(TREE_TYPE(decl));
+  indent.del();
+}
+void dumpv_expr(tree expr) {
+  fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(expr), tree_code_name[TREE_CODE(expr)]);
+  location_t loc = EXPR_LOCATION(expr);
+  fprintf(os, "%s:%d:%d\n", LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
+  // MACRO
+  indent.add();
+  switch (TREE_CODE(expr)) {
+  case BIND_EXPR:
+    for (tree vardecl = BIND_EXPR_VARS(expr); vardecl; vardecl = TREE_CHAIN(vardecl)) {
+    }
+    dumpv_node(BIND_EXPR_BODY(expr));
+    break;
+  case VA_ARG_EXPR:
+    dumpv_node(TREE_OPERAND(expr, 0));
+    dumpv_node(TREE_TYPE(expr));
+    break;
+  case CALL_EXPR: {
+    dumpv_node(CALL_EXPR_FN(expr));
+    int len = call_expr_nargs(expr);
+    for (int i = 0; i < len; ++i)
+      dumpv_node(CALL_EXPR_ARG(expr, i));
+    break;
+  }
+  case ASM_EXPR: {
+    dumpv_cst(ASM_STRING(expr));
+    fprintf(os, "%sNA asm_outputs\n", indent.c_str());
+    indent.add();
+    for (tree it = ASM_OUTPUTS(expr); it; it = TREE_CHAIN(it)) {
+      fprintf(os, "%sNA asm_operand\n", indent.c_str());
+      indent.add();
+      dumpv_node(TREE_PURPOSE(TREE_PURPOSE(it)));  // can be NULL, or we can use `dumpv_cst`
+      dumpv_cst(TREE_VALUE(TREE_PURPOSE(it)));
+      dumpv_node(TREE_VALUE(it));
+      indent.del();
+    }
+    indent.del();
+    fprintf(os, "%sNA asm_inputs\n", indent.c_str());
+    indent.add();
+    for (tree it = ASM_INPUTS(expr); it; it = TREE_CHAIN(it)) {
+      fprintf(os, "%sNA asm_operand\n", indent.c_str());
+      indent.add();
+      dumpv_node(TREE_PURPOSE(TREE_PURPOSE(it)));  // can be NULL, or we can use `dumpv_cst`
+      dumpv_cst(TREE_VALUE(TREE_PURPOSE(it)));
+      dumpv_node(TREE_VALUE(it));
+      indent.del();
+    }
+    indent.del();
+    fprintf(os, "%sNA asm_clobbers\n", indent.c_str());
+    indent.add();
+    for (tree it = ASM_CLOBBERS(expr); it; it = TREE_CHAIN(it)) {
+      assert(TREE_PURPOSE(it) == NULL_TREE);
+      dumpv_cst(TREE_VALUE(it));
+    }
+    indent.del();
+    fprintf(os, "%sNA asm_labels\n", indent.c_str());
+    indent.add();
+    for (tree it = ASM_LABELS(expr); it; it = TREE_CHAIN(it)) {
+      dumpv_cst(TREE_PURPOSE(it));
+      // dump_identifier_node(DECL_NAME(TREE_VALUE(it)));
+    }
+    indent.del();
+    break;
+  }
+  default: {
+    int len = TREE_OPERAND_LENGTH(expr);
+    for (int i = 0; i < len; ++i) {
+      bool skip = false;
+      skip = skip || (TREE_CODE(expr) == ARRAY_REF && (i == 2 || i == 3));
+      skip = skip || (TREE_CODE(expr) == COMPONENT_REF && (i == 2));
+      skip = skip || (TREE_CODE(expr) == TARGET_EXPR && (i == 2 || i == 3));
+      skip = skip || (TREE_CODE(expr) == CASE_LABEL_EXPR && (i == 3));
+      if (skip)
+        continue;
+      dumpv_node(TREE_OPERAND(expr, i));
+    }
+  }
+  }
+  indent.del();
+}
+void dumpv_type(tree type) {
+  fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(type), tree_code_name[TREE_CODE(type)]);
+  tree typedecl = TYPE_NAME(type);
+  if (typedecl != NULL_TREE) {  // boolean, integer, void, record, union
+    if (TREE_CODE(typedecl) == IDENTIFIER_NODE) {  // FIXME https://gcc.gnu.org/onlinedocs/gcc-4.8.4/gccint/Types.html#index-TYPE_005fNAME-2377
+      fprintf(os, "structBUG %s\n", IDENTIFIER_POINTER(typedecl));
+      return;
+    }
+    fprintf(os, "%s\n", IDENTIFIER_POINTER(DECL_NAME(typedecl)));
+  } else if (TREE_CODE(type) == POINTER_TYPE || TREE_CODE(type) == ARRAY_TYPE) {
+    fprintf(os, "%s\n", (TREE_CODE(type) == POINTER_TYPE) ? "*" : "[]");
+    indent.add();
+    dumpv_type(TREE_TYPE(type));
+    indent.del();
+  } else {  // enumeral
+    fprintf(os, "<unknown>\n");
+  }
+}
+void dumpv_node(tree node) {
+  if (!node) {
+    fprintf(os, "%sNULL_xx\n", indent.c_str());
+    return;
+  }
+  if (TREE_CODE(node) == STATEMENT_LIST) {
+    fprintf(os, "%s%d %s\n", indent.c_str(), TREE_CODE(node), tree_code_name[TREE_CODE(node)]);
+    indent.add();
+    for (tree_stmt_iterator it = tsi_start(node); !tsi_end_p(it); tsi_next(&it))
+      dumpv_node(tsi_stmt(it));
+    indent.del();
+  } else if (EXPR_P(node)) {
+    dumpv_expr(node);
+  } else if (CONSTANT_CLASS_P(node)) {
+    dumpv_cst(node);
+  } else if (DECL_P(node)) {
+    dumpv_decl(node);
+  } else if (TYPE_P(node)) {
+    dumpv_type(node);
+  } else if (TREE_CODE(node) == TREE_LIST) {
+    fprintf(os, "%s%d %s TODO_%d\n", indent.c_str(), TREE_CODE(node), tree_code_name[TREE_CODE(node)], __LINE__);
+    indent.add();
+    /*
+    for (tree it = node; it; it = TREE_CHAIN(it)) {
+      dumpv_unknown(TREE_VALUE(it), __LINE__);
+      dumpv_unknown(TREE_PURPOSE(it), __LINE__);
+    }
+    */
+    dumpv_node(TREE_VALUE(node));
+    dumpv_node(TREE_PURPOSE(node));
+    dumpv_node(TREE_CHAIN(node));
+    indent.del();
+  } else {
+    dumpv_unknown(node, __LINE__);
+  }
+}
+#define TREE_INT_CST_VALUE(e) ((TREE_INT_CST_HIGH (e) << HOST_BITS_PER_WIDE_INT) + TREE_INT_CST_LOW (e))
+void dumpv_cst(tree cst) {
+  fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(cst), tree_code_name[TREE_CODE(cst)]);
+  switch (TREE_CODE(cst)) {
+  case INTEGER_CST:
+    fprintf(os, "%d\n", TREE_INT_CST_VALUE(cst));
+    break;
+  case STRING_CST: {
+    std::string tmp(TREE_STRING_POINTER(cst), TREE_STRING_LENGTH(cst));
+    for (std::string::iterator it = tmp.begin(); it != tmp.end(); ++it)
+      if (*it == '\n' || *it == '\0')
+        *it = ' ';
+    fprintf(os, "%s\n", tmp.c_str());
+    break;
+  }
+  default:
+    fprintf(os, "<cst>\n");
+  }
+}
+void dumpv_unknown(tree node, int line) {
+  if (!node) {
+    fprintf(os, "%sNULL TODO_%d\n", indent.c_str(), line);
+    return;
+  }
+  fprintf(os, "%s%d %s TODO_%d\n", indent.c_str(), TREE_CODE(node), tree_code_name[TREE_CODE(node)], line);
+}
 
 typedef struct {
   const struct line_map *map;
@@ -109,31 +291,6 @@ std::string get_macro_info(source_location where) {
   return res.str();
 }
 
-std::string _get_type_name(tree type) {
-  tree typedecl = TYPE_NAME(type);
-  if (typedecl != NULL_TREE) {
-    if (TREE_CODE(typedecl) == IDENTIFIER_NODE) {  // FIXME https://gcc.gnu.org/onlinedocs/gcc-4.8.4/gccint/Types.html#index-TYPE_005fNAME-2377
-      return std::string("struct ") + IDENTIFIER_POINTER(typedecl);
-    }
-    return IDENTIFIER_POINTER(DECL_NAME(typedecl));
-  } else if (TREE_CODE(type) == POINTER_TYPE) {
-    return _get_type_name(TREE_TYPE(type)) + "*";
-  } else
-    return "<unknown> TDO_type";
-}
-const char* get_type_name(tree type) {
-  static std::string s;  // not re-entryable!
-  s = _get_type_name(type);
-  return s.c_str();
-}
-
-void dump_unknown(tree node) {
-  if (!node) {
-    fprintf(os, "%s0x%08x TODO_%d\n", indent.c_str(), node, __LINE__);
-    return;
-  }
-  fprintf(os, "%s%d %s ??? TODO_%d\n", indent.c_str(), TREE_CODE(node), tree_code_name[TREE_CODE(node)], __LINE__);
-}
 void dump_unknown_tree_list(tree node) {
   /*if (!node) {
     fprintf(os, "%s0x%08x TODO_%d\n", indent.c_str(), node, __LINE__);
@@ -146,195 +303,6 @@ void dump_unknown_tree_list(tree node) {
   }
   indent.del();*/
 }
-void dump_function_decl(tree fndecl) {
-  fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(fndecl), tree_code_name[TREE_CODE(fndecl)]);
-  const char* label = (DECL_NAME(fndecl) ? IDENTIFIER_POINTER(DECL_NAME(fndecl)) : "(unnamed)");
-  location_t loc = DECL_SOURCE_LOCATION(fndecl);
-  struct function* fn = DECL_STRUCT_FUNCTION(fndecl);
-  location_t start = fn->function_start_locus, end = fn->function_end_locus;
-  fprintf(os, "%s %s:%d:%d %s:%d:%d\n", label, LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc), LOCATION_FILE(end), LOCATION_LINE(end), LOCATION_COLUMN(end));
-  indent.add();
-  dump_result_decl(DECL_RESULT(fndecl));
-  for (tree args = DECL_ARGUMENTS(fndecl); args; args = DECL_CHAIN(args))
-    dump_parm_decl(args);
-  dump_bind_expr(DECL_SAVED_TREE(fndecl));
-  indent.del();
-}
-void dump_result_decl(tree resdecl) {
-  fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(resdecl), tree_code_name[TREE_CODE(resdecl)]);
-  const char* label = (DECL_NAME(resdecl) ? IDENTIFIER_POINTER(DECL_NAME(resdecl)) : "(unnamed)");
-  location_t loc = DECL_SOURCE_LOCATION(resdecl);
-  fprintf(os, "%s %s:%d:%d\n", label, LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
-  indent.add();
-  dumpv_type(TREE_TYPE(resdecl));
-  indent.del();
-}
-void dump_parm_decl(tree args) {
-  fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(args), tree_code_name[TREE_CODE(args)]);
-  const char* label = (DECL_NAME(args) ? IDENTIFIER_POINTER(DECL_NAME(args)) : "(unnamed)");
-  location_t loc = DECL_SOURCE_LOCATION(args);
-  fprintf(os, "%s %s:%d:%d\n", label, LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
-  indent.add();
-  dumpv_type(TREE_TYPE(args));
-  indent.del();
-}
-void dumpv_type(tree type) {
-  fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(type), tree_code_name[TREE_CODE(type)]);
-  fprintf(os, "%s\n", get_type_name(type));
-}
-void dump_function_decl_incomplete(tree fndecl) {
-  fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(fndecl), tree_code_name[TREE_CODE(fndecl)]);
-  const char* label = (DECL_NAME(fndecl) ? IDENTIFIER_POINTER(DECL_NAME(fndecl)) : "(unnamed)");
-  location_t loc = DECL_SOURCE_LOCATION(fndecl);
-  fprintf(os, "%s %s:%d:%d\n", label, LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
-  indent.add();
-  dump_function_type(TREE_TYPE(fndecl));
-  indent.del();
-}
-void dump_function_type(tree fntype) {
-  fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(fntype), tree_code_name[TREE_CODE(fntype)]);
-  fprintf(os, "()\n");
-  indent.add();
-  dumpv_type(TREE_TYPE(fntype));
-  indent.del();
-}
-void dump_var_decl(tree vardecl) {
-  fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(vardecl), tree_code_name[TREE_CODE(vardecl)]);
-  const char* label = (DECL_NAME(vardecl) ? IDENTIFIER_POINTER(DECL_NAME(vardecl)) : "(unnamed)");
-  location_t loc = DECL_SOURCE_LOCATION(vardecl);
-  fprintf(os, "%s %s:%d:%d\n", label, LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
-  indent.add();
-  dumpv_type(TREE_TYPE(vardecl));
-  indent.del();
-}
-void dump_bind_expr(tree block) {
-  fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(block), tree_code_name[TREE_CODE(block)]);
-  location_t loc = EXPR_LOCATION(block);
-  fprintf(os, "() %s:%d:%d\n", LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
-  indent.add();
-  for (tree vardecl = BIND_EXPR_VARS(block); vardecl; vardecl = TREE_CHAIN(vardecl)) {
-    if (TREE_CODE(vardecl) == VAR_DECL)
-      dump_var_decl(vardecl);
-    else
-      fprintf(os, "%s%d %s ??? TDO_%d\n", indent.c_str(), TREE_CODE(vardecl), tree_code_name[TREE_CODE(vardecl)], __LINE__);
-  }
-  dumpv_body(BIND_EXPR_BODY(block));
-  // dump_unknown(BIND_EXPR_BLOCK(block));
-  indent.del();
-}
-void dumpv_body(tree body) {
-  switch (TREE_CODE(body)) {
-  case STATEMENT_LIST:
-    dump_statement_list(body);
-    break;
-  // GUESS: when only one statement, no statement list here
-  default:
-    dumpv_block_item(body);
-  }
-}
-void dump_statement_list(tree stmts) {
-  fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(stmts), tree_code_name[TREE_CODE(stmts)]);
-  fprintf(os, "()\n");
-  indent.add();
-  for (tree_stmt_iterator it = tsi_start(stmts); !tsi_end_p(it); tsi_next(&it))
-    dumpv_block_item(tsi_stmt(it));
-  indent.del();
-}
-void dumpv_block_item(tree item) {
-  if (!item) {
-    if (allow_empty)
-      fprintf(os, "%sNULL_xx\n", indent.c_str());
-    else
-      fprintf(os, "%s0x%08x TODO_%d\n", indent.c_str(), item, __LINE__);
-    allow_empty = false;
-    return;
-  }
-  if (TREE_CODE(item) == BIND_EXPR) {
-    dump_bind_expr(item);
-    return;
-  }
-  if (EXPR_P(item)) {
-    dumpv_expr(item);
-    return;
-  }
-  switch (TREE_CODE(item)) {
-  case INTEGER_CST:
-  case STRING_CST:
-    dumpv_constant(item);
-    break;
-  case RESULT_DECL:
-  case FUNCTION_DECL:
-  case VAR_DECL:
-  case PARM_DECL:
-  case FIELD_DECL:  // TODO should the following be merged or separated?
-  case LABEL_DECL:
-    dumpv_decl_ref(item);
-    break;
-  case STATEMENT_LIST:
-    dump_statement_list(item);
-    break;
-  case TREE_LIST:
-    dump_unknown_tree_list(item);
-    break;
-  default:
-    dump_unknown(item);
-  }
-}
-void dumpv_expr(tree expr) {
-  fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(expr), tree_code_name[TREE_CODE(expr)]);
-  location_t loc = EXPR_LOCATION(expr);
-  fprintf(os, "() %s:%d:%d (%s)\n", LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc), get_macro_info(loc).c_str());
-  if (TREE_CODE(expr) == CALL_EXPR) {
-    indent.add();
-    dumpv_block_item(CALL_EXPR_FN(expr));
-    int len = call_expr_nargs(expr);
-    for (int i = 0; i < len; ++i)
-      dumpv_block_item(CALL_EXPR_ARG(expr, i));
-    indent.del();
-    return;
-  }
-  indent.add();
-  int len = TREE_OPERAND_LENGTH(expr);
-  for (int i = 0; i < len; ++i) {
-    bool skip = false;
-    skip = skip || (TREE_CODE(expr) == COMPONENT_REF && i == 2);
-    skip = skip || (TREE_CODE(expr) == CASE_LABEL_EXPR && i == 3);
-    skip = skip || (TREE_CODE(expr) == ARRAY_REF && (i == 2 || i == 3));
-    skip = skip || (TREE_CODE(expr) == TARGET_EXPR && (i == 2) || (i == 3));
-    if (skip)
-      continue;
-    allow_empty = allow_empty || (TREE_CODE(expr) == RETURN_EXPR && i == 0 && TREE_OPERAND(expr, i) == NULL_TREE);
-    allow_empty = allow_empty || (TREE_CODE(expr) == COND_EXPR && i == 2 && TREE_OPERAND(expr, i) == NULL_TREE);
-    allow_empty = allow_empty || (TREE_CODE(expr) == ASM_EXPR && i >= 1 && TREE_OPERAND(expr, i) == NULL_TREE);
-    allow_empty = allow_empty || (TREE_CODE(expr) == CASE_LABEL_EXPR && (i == 0 || i == 1 ));
-    allow_empty = allow_empty || (TREE_CODE(expr) == SWITCH_EXPR && (i == 2));
-    dumpv_block_item(TREE_OPERAND(expr, i));
-  }
-  indent.del();
-}
-#define TREE_INT_CST_VALUE(e) ((TREE_INT_CST_HIGH (e) << HOST_BITS_PER_WIDE_INT) + TREE_INT_CST_LOW (e))
-void dumpv_constant(tree constant) {
-  fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(constant), tree_code_name[TREE_CODE(constant)]);
-  if (TREE_CODE(constant) == INTEGER_CST) {
-    fprintf(os, "%d\n", TREE_INT_CST_VALUE(constant));
-    return;
-  }
-  if (TREE_CODE(constant) == STRING_CST) {
-    std::string tmp = TREE_STRING_POINTER(constant);
-    for (std::string::iterator it = tmp.begin(); it != tmp.end(); ++it)
-      if (*it == '\n')
-        *it = ' ';
-    fprintf(os, "%s\n", tmp.c_str());
-    return;
-  }
-  fprintf(os, "(TODO_%d)\n", __LINE__);
-}
-void dumpv_decl_ref(tree decl) {
-  fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(decl), tree_code_name[TREE_CODE(decl)]);
-  const char* label = (DECL_NAME(decl) ? IDENTIFIER_POINTER(DECL_NAME(decl)) : "(unnamed)");
-  location_t loc = DECL_SOURCE_LOCATION(decl);
-  fprintf(os, "%s %s:%d:%d\n", label, LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
-}
 
 void callback_pre_genericize (void *gcc_data, void *user_data)
 {
@@ -345,7 +313,7 @@ void callback_type (void *gcc_data, void *user_data)
 {
   // Only called with `struct` or `union`, not even `enum`
   tree spec = (tree)gcc_data;
-  INSPECT_TREE_CODE(spec);
+  // INSPECT_TREE_CODE(spec);
 }
 void callback_decl (void *gcc_data, void *user_data)
 {
@@ -354,11 +322,11 @@ void callback_decl (void *gcc_data, void *user_data)
     return;
   if (TREE_CODE(decl) == FUNCTION_DECL) {
     tree fndecl = (tree)gcc_data;
-    dump_function_decl_incomplete(fndecl);
+    // dump_function_decl_incomplete(fndecl);
     return;
   } else if (TREE_CODE(decl) == VAR_DECL) {
     tree vardecl = (tree)gcc_data;
-    dump_var_decl(vardecl);
+    dumpv_decl(vardecl);
     return;
   }
   INSPECT_TREE_CODE(decl);
