@@ -261,6 +261,59 @@ void dumpv_unknown(tree node, int line) {
   fprintf(os, "%s%d %s TODO_%d\n", indent.c_str(), TREE_CODE(node), tree_code_name[TREE_CODE(node)], line);
 }
 
+void dumpv_type_deep(tree type);
+void dump_field_decl_deep(tree decl);
+void dumpv_type_deep(tree type) {
+  fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(type), tree_code_name[TREE_CODE(type)]);
+  tree typedecl = TYPE_NAME(type);
+  if (typedecl != NULL_TREE) {  // boolean, integer, void, record, union
+    if (TREE_CODE(typedecl) == IDENTIFIER_NODE) {  // FIXME https://gcc.gnu.org/onlinedocs/gcc-4.8.4/gccint/Types.html#index-TYPE_005fNAME-2377
+      fprintf(os, "structBUG %s\n", IDENTIFIER_POINTER(typedecl));
+    } else {
+      fprintf(os, "%s\n", IDENTIFIER_POINTER(DECL_NAME(typedecl)));
+    }
+  } else {
+    fprintf(os, "(unnamed)\n");
+  }
+  switch (TREE_CODE(type)) {
+  case ARRAY_TYPE:
+  case POINTER_TYPE:
+    indent.add();
+    dumpv_type_deep(TREE_TYPE(type));
+    indent.del();
+    break;
+  case BOOLEAN_TYPE:
+  case INTEGER_TYPE:
+  case VOID_TYPE:
+    break;
+  case RECORD_TYPE:
+  case UNION_TYPE:
+    indent.add();
+    for (tree it = TYPE_FIELDS(type); it; it = DECL_CHAIN(it)) {
+      dump_field_decl_deep(it);
+    }
+    indent.del();
+    break;
+  case ENUMERAL_TYPE:
+    indent.add();
+    for (tree it = TYPE_VALUES(type); it; it = TREE_CHAIN(it)) {
+      dump_identifier_node(TREE_PURPOSE(it));
+    }
+    indent.del();
+    break;
+  }
+}
+void dump_field_decl_deep(tree decl) {
+  fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(decl), tree_code_name[TREE_CODE(decl)]);
+  location_t loc = DECL_SOURCE_LOCATION(decl);
+  fprintf(os, "%s:%d:%d\n", LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
+  indent.add();
+  dump_identifier_node(DECL_NAME(decl));
+  dumpv_type_deep(TREE_TYPE(decl));
+  indent.del();
+}
+
+
 typedef struct {
   const struct line_map *map;
   source_location where;
@@ -331,7 +384,7 @@ void callback_type (void *gcc_data, void *user_data)
 {
   // Only called with `struct` or `union`, not even `enum`
   tree spec = (tree)gcc_data;
-  // INSPECT_TREE_CODE(spec);
+  dumpv_type_deep(spec);
 }
 void callback_decl (void *gcc_data, void *user_data)
 {
