@@ -67,6 +67,7 @@ void dumpv_cst(tree cst);
 void dumpv_expr(tree expr);
 void dumpv_node(tree node);
 void dumpv_unknown(tree node, int line);
+std::string get_macro_info(source_location where, source_location* fix);
 
 void dump_function_decl(tree fndecl) {
   fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(fndecl), tree_code_name[TREE_CODE(fndecl)]);
@@ -99,9 +100,10 @@ void dumpv_decl(tree decl) {
 }
 void dumpv_expr(tree expr) {
   fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(expr), tree_code_name[TREE_CODE(expr)]);
-  location_t loc = EXPR_LOCATION(expr);
-  fprintf(os, "%s:%d:%d\n", LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
-  // MACRO
+  location_t tmp = EXPR_LOCATION(expr), loc;
+  std::string macro_info = get_macro_info(tmp, &loc);
+  fprintf(os, "%s:%d:%d ", LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
+  fprintf(os, "(%s)\n", macro_info.c_str());
   indent.add();
   switch (TREE_CODE(expr)) {
   case BIND_EXPR:
@@ -261,7 +263,9 @@ typedef struct {
   const struct line_map *map;
   source_location where;
 } loc_map_pair;
-std::string get_macro_info(source_location where) {
+std::string get_macro_info(source_location where, source_location* fix) {
+  if (fix != NULL)
+    *fix = where;
   const struct line_map* map = linemap_lookup(line_table, where);
   if (!linemap_macro_expansion_map_p(map))
     return std::string("");
@@ -278,15 +282,27 @@ std::string get_macro_info(source_location where) {
   std::ostringstream res;
   unsigned ix;
   loc_map_pair* iter;
+  bool start = false;
+  source_location last;
   FOR_EACH_VEC_ELT(loc_vec, ix, iter) {
-    if (ix == 0) {
+    if (!start) {
       source_location resolved_def_loc = linemap_resolve_location (line_table, iter->where, LRK_MACRO_DEFINITION_LOCATION, NULL);
-      res << LOCATION_FILE(resolved_def_loc) << ":" << LOCATION_LINE(resolved_def_loc) << ":" << LOCATION_COLUMN(resolved_def_loc);
+      source_location resolved_spl_loc = linemap_resolve_location (line_table, iter->where, LRK_SPELLING_LOCATION, NULL);
+      if (linemap_compare_locations(line_table, resolved_def_loc, resolved_spl_loc) == 0) {
+        start = true;
+        res << LOCATION_FILE(resolved_def_loc) << ":" << LOCATION_LINE(resolved_def_loc) << ":" << LOCATION_COLUMN(resolved_def_loc);
+      }
+      last = resolved_spl_loc;
     }
-    res << " " << linemap_map_get_macro_name(iter->map) << " ";
-    source_location resolved_exp_loc = linemap_resolve_location (line_table, MACRO_MAP_EXPANSION_POINT_LOCATION (iter->map), LRK_MACRO_DEFINITION_LOCATION, NULL);
-    res << LOCATION_FILE(resolved_exp_loc) << ":" << LOCATION_LINE(resolved_exp_loc) << ":" << LOCATION_COLUMN(resolved_exp_loc);
+    if (start) {  // should NOT be `else` clause of the above `if`
+      res << " " << linemap_map_get_macro_name(iter->map) << " ";
+      source_location resolved_exp_loc = linemap_resolve_location (line_table, MACRO_MAP_EXPANSION_POINT_LOCATION (iter->map), LRK_MACRO_DEFINITION_LOCATION, NULL);
+      res << LOCATION_FILE(resolved_exp_loc) << ":" << LOCATION_LINE(resolved_exp_loc) << ":" << LOCATION_COLUMN(resolved_exp_loc);
+      last = resolved_exp_loc;
+    }
   }
+  if (fix != NULL)
+    *fix = last;
   loc_vec.release ();
   return res.str();
 }
