@@ -71,10 +71,11 @@ std::string get_macro_info(source_location where, source_location* fix);
 
 void dump_function_decl(tree fndecl) {
   fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(fndecl), tree_code_name[TREE_CODE(fndecl)]);
+  const char* label = (DECL_NAME(fndecl) ? IDENTIFIER_POINTER(DECL_NAME(fndecl)) : "(unnamed)");
   location_t loc = DECL_SOURCE_LOCATION(fndecl);
   struct function* fn = DECL_STRUCT_FUNCTION(fndecl);
   location_t start = fn->function_start_locus, end = fn->function_end_locus;
-  fprintf(os, "%s:%d:%d %s:%d:%d\n", LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc), LOCATION_FILE(end), LOCATION_LINE(end), LOCATION_COLUMN(end));
+  fprintf(os, "%s %s:%d:%d %s:%d:%d\n", label, LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc), LOCATION_FILE(end), LOCATION_LINE(end), LOCATION_COLUMN(end));
   indent.add();
   dump_identifier_node(DECL_NAME(fndecl));
   dumpv_decl(DECL_RESULT(fndecl));
@@ -92,7 +93,8 @@ void dump_identifier_node(tree id) {
 void dumpv_decl(tree decl) {
   fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(decl), tree_code_name[TREE_CODE(decl)]);
   location_t loc = DECL_SOURCE_LOCATION(decl);
-  fprintf(os, "%s:%d:%d\n", LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
+  // fprintf(os, "%s:%d:%d\n", LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
+  fprintf(os, "\n");
   indent.add();
   dump_identifier_node(DECL_NAME(decl));
   dumpv_type(TREE_TYPE(decl));
