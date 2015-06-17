@@ -63,6 +63,7 @@ void dump_function_decl(tree fndecl);
 void dump_identifier_node(tree id);
 void dumpv_type(tree type);
 void dumpv_decl(tree decl);
+void dumpv_ref(tree decl);
 void dumpv_cst(tree cst);
 void dumpv_expr(tree expr);
 void dumpv_node(tree node);
@@ -93,11 +94,17 @@ void dump_identifier_node(tree id) {
 void dumpv_decl(tree decl) {
   fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(decl), tree_code_name[TREE_CODE(decl)]);
   location_t loc = DECL_SOURCE_LOCATION(decl);
-  // fprintf(os, "%s:%d:%d\n", LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
-  fprintf(os, "\n");
+  fprintf(os, "%s:%d:%d\n", LOCATION_FILE(loc), LOCATION_LINE(loc), LOCATION_COLUMN(loc));
   indent.add();
   dump_identifier_node(DECL_NAME(decl));
   dumpv_type(TREE_TYPE(decl));
+  indent.del();
+}
+void dumpv_ref(tree decl) {
+  fprintf(os, "%s%d %s ", indent.c_str(), TREE_CODE(decl), tree_code_name[TREE_CODE(decl)]);
+  fprintf(os, "\n");
+  indent.add();
+  dump_identifier_node(DECL_NAME(decl));
   indent.del();
 }
 void dumpv_expr(tree expr) {
@@ -164,6 +171,9 @@ void dumpv_expr(tree expr) {
     indent.del();
     break;
   }
+  case DECL_EXPR:
+    dumpv_decl(DECL_EXPR_DECL(expr));
+    break;
   default: {
     int len = TREE_OPERAND_LENGTH(expr);
     for (int i = 0; i < len; ++i) {
@@ -194,8 +204,41 @@ void dumpv_type(tree type) {
     indent.add();
     dumpv_type(TREE_TYPE(type));
     indent.del();
-  } else {  // enumeral
-    fprintf(os, "<unknown>\n");
+  } else {
+    switch (TREE_CODE(type)) {
+    case RECORD_TYPE:
+    case UNION_TYPE: {
+      fprintf(os, "(inplace)\n");
+      indent.add();
+      for (tree it = TYPE_FIELDS(type); it; it = DECL_CHAIN(it)) {
+        // dump_field_decl_deep(it);
+        dumpv_decl(it);
+      }
+      indent.del();
+      break;
+    }
+    case ENUMERAL_TYPE: {
+      fprintf(os, "(inplace)\n");
+      indent.add();
+      for (tree it = TYPE_VALUES(type); it; it = TREE_CHAIN(it)) {
+        dump_identifier_node(TREE_PURPOSE(it));
+      }
+      indent.del();
+      break;
+    }
+    case FUNCTION_TYPE: {
+      fprintf(os, "(inplace)\n");
+      indent.add();
+      dumpv_type(TREE_TYPE(type));
+      for (tree it = TYPE_ARG_TYPES(type); it; it = TREE_CHAIN(it)) {
+        dumpv_type(TREE_VALUE(it));
+      }
+      indent.del();
+      break;
+    }
+    default:
+      fprintf(os, "<unknown>\n");
+    }
   }
 }
 void dumpv_node(tree node) {
@@ -214,7 +257,7 @@ void dumpv_node(tree node) {
   } else if (CONSTANT_CLASS_P(node)) {
     dumpv_cst(node);
   } else if (DECL_P(node)) {
-    dumpv_decl(node);
+    dumpv_ref(node);
   } else if (TYPE_P(node)) {
     dumpv_type(node);
   } else if (TREE_CODE(node) == TREE_LIST) {
@@ -298,6 +341,14 @@ void dumpv_type_deep(tree type) {
     indent.add();
     for (tree it = TYPE_VALUES(type); it; it = TREE_CHAIN(it)) {
       dump_identifier_node(TREE_PURPOSE(it));
+    }
+    indent.del();
+    break;
+  case FUNCTION_TYPE:
+    indent.add();
+    dumpv_type(TREE_TYPE(type));
+    for (tree it = TYPE_ARG_TYPES(type); it; it = TREE_CHAIN(it)) {
+      dumpv_type(TREE_VALUE(it));
     }
     indent.del();
     break;
