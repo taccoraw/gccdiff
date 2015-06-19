@@ -266,7 +266,7 @@ def merge_mark(gum_dict, diff, loc0, loc1, o):
     file_cache = {}
     for uid in macro:
         print >> o, '<table class="macro" id="macro-{}">'.format(uid)
-        print >> o, '<caption>Macro Expansion Info for Action <a href="act-{i}">#{i}</caption>'.format(i=uid)
+        print >> o, '<caption>Macro Expansion Info for Action <a href="#act-{i}">#{i}</caption>'.format(i=uid)
         if macro[uid][1] == '0':
             PREFIX_CODE, PREFIX_BUILD = V0_CODE, V0_BUILD
         else:
@@ -460,10 +460,27 @@ def main():
     '''
     #with open('/tmp/diff_area/macro.html', 'w') as o:
     #    gen_html('kernel/futex.c', 'futex_atomic_op_inuser', o)
-    with open('/tmp/diff_area/macro2.html', 'w') as o:
-        gen_html('fs/filesystems.c', 'fs_index', o)
+    #with open('/tmp/diff_area/macro2.html', 'w') as o:
+    #    gen_html('fs/filesystems.c', 'fs_index', o)
+    func, file_ = 'vgacon_adjust_height', 'drivers/video/console/vgacon.c'
+    func, file_ = 'write_vga', 'drivers/video/console/vgacon.c'
+    func, file_ = 'vgacon_set_cursor_size', 'drivers/video/console/vgacon.c'
+    func, file_ = 'vga_vesa_blank', 'drivers/video/console/vgacon.c'
+    func, file_ = 'vgacon_doresize', 'drivers/video/console/vgacon.c'
+    func, file_ = 'vga_vesa_unblank', 'drivers/video/console/vgacon.c'
+    func, file_ = 'vgacon_do_font_op', 'drivers/video/console/vgacon.c'
+    with open('/tmp/diff_area/'+func+'.html', 'w') as o:
+        gen_html(file_, func, o)
     #gen_html('arch/x86/kernel/cpu/perf_event_intel_lbr.c', 'branch_type')
     # gen_html('part.c', 'main')
+'''
+    func, file_ = 'write_vga', 'drivers/video/console/vgacon.c'
+    func, file_ = 'vgacon_set_cursor_size', 'drivers/video/console/vgacon.c'
+    func, file_ = 'vga_vesa_blank', 'drivers/video/console/vgacon.c'
+    func, file_ = 'vgacon_doresize', 'drivers/video/console/vgacon.c'
+    func, file_ = 'vga_vesa_unblank', 'drivers/video/console/vgacon.c'
+    func, file_ = 'vgacon_do_font_op', 'drivers/video/console/vgacon.c'
+'''
 
 
 if __name__ == '__main__':
